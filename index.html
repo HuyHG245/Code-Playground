@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code Playground — Live Editor</title>
+    <meta name="description" content="Write and run code in many languages with a live result panel and error reporting.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <header class="topbar">
+        <a href="#" class="brand">&lt;CodePlayground /&gt;</a>
+        <div class="controls">
+            <label class="lang-wrap">
+                <span class="lang-label">Language</span>
+                <select id="lang"></select>
+            </label>
+            <button id="runBtn" class="btn" title="Ctrl + Enter">Run</button>
+        </div>
+        <div id="status" class="status">Ready</div>
+    </header>
+
+    <main class="split">
+        <section class="panel editor-panel">
+            <div class="panel-head">
+                <span id="fileName" class="panel-title">index.html</span>
+                <span class="badge badge--live">Live</span>
+            </div>
+            <div class="editor">
+                <div id="gutter" class="gutter" aria-hidden="true">1</div>
+                <textarea id="editor" spellcheck="false" autocapitalize="off" autocorrect="off" autocomplete="off" wrap="off"></textarea>
+                <div class="hint">Tip: Tab inserts spaces, Ctrl + Enter runs</div>
+            </div>
+        </section>
+
+        <section class="panel output-panel">
+            <div class="panel-head">
+                <span class="panel-title">Result <span id="runTime" class="run-time">—</span></span>
+            </div>
+            <div id="previewWrap" class="preview-wrap">
+                <iframe id="preview" sandbox="allow-scripts allow-modals allow-forms" title="Preview"></iframe>
+                <pre id="console" class="console" hidden></pre>
+                <div id="loading" class="loading" hidden>Running…</div>
+            </div>
+            <div id="errorPanel" class="error-panel" hidden>
+                <div class="error-head">Errors</div>
+                <pre id="errorText"></pre>
+            </div>
+        </section>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>

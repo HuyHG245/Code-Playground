@@ -274,7 +274,7 @@ body {
     overflow: hidden;
 }
 
-.CodeMirror {
+.cm-s-vsc.CodeMirror {
     height: 100%;
     font-family: var(--font-mono);
     font-size: 14px;
@@ -283,64 +283,65 @@ body {
     color: var(--text);
 }
 
-.CodeMirror-gutters {
+.cm-s-vsc .CodeMirror-gutters {
     background: var(--bg);
     border-right: 1px solid var(--border);
     color: var(--linenum);
 }
 
-.CodeMirror-linenumber {
+.cm-s-vsc .CodeMirror-linenumber {
     color: var(--linenum);
 }
 
-.CodeMirror-activeline .CodeMirror-linenumber {
+.cm-s-vsc .CodeMirror-activeline .CodeMirror-linenumber {
     color: var(--text);
 }
 
-.CodeMirror-cursor {
+.cm-s-vsc .CodeMirror-cursor {
     border-left: 2px solid var(--caret);
 }
 
-.CodeMirror-selected,
-.CodeMirror-focused .CodeMirror-selected {
+.cm-s-vsc .CodeMirror-selected,
+.cm-s-vsc.CodeMirror-focused .CodeMirror-selected {
     background: var(--selection);
 }
 
-.CodeMirror-activeline-background {
+.cm-s-vsc .CodeMirror-activeline-background {
     background: var(--activeline);
 }
 
-.CodeMirror-matchingbracket {
+.cm-s-vsc .CodeMirror-matchingbracket {
     color: var(--text) !important;
     background: var(--match-bg);
     outline: 1px solid var(--match-outline);
 }
 
-.CodeMirror-nonmatchingbracket {
+.cm-s-vsc .CodeMirror-nonmatchingbracket {
     color: var(--tok-error) !important;
 }
 
-/* Syntax token colors (VS Code palette) */
-.cm-keyword { color: var(--tok-keyword); }
-.cm-atom { color: var(--tok-atom); }
-.cm-number { color: var(--tok-number); }
-.cm-def { color: var(--tok-fn); }
-.cm-variable { color: var(--tok-var); }
-.cm-variable-2 { color: var(--tok-var); }
-.cm-variable-3 { color: var(--tok-type); }
-.cm-property { color: var(--tok-prop); }
-.cm-operator { color: var(--tok-op); }
-.cm-comment { color: var(--tok-comment); }
-.cm-string { color: var(--tok-string); }
-.cm-string-2 { color: var(--tok-string); }
-.cm-tag { color: var(--tok-tag); }
-.cm-attribute { color: var(--tok-attr); }
-.cm-qualifier { color: var(--tok-attr); }
-.cm-builtin { color: var(--tok-builtin); }
-.cm-meta { color: var(--tok-meta); }
-.cm-bracket { color: var(--tok-punct); }
-.cm-punctuation { color: var(--tok-punct); }
-.cm-error { color: var(--tok-error); background: rgba(244, 135, 113, 0.1); }
+/* Syntax token colors (VS Code palette) — scoped to the vsc theme so the
+   default CodeMirror colors (purple keywords, etc.) can't override them. */
+.cm-s-vsc .cm-keyword { color: var(--tok-keyword); }
+.cm-s-vsc .cm-atom { color: var(--tok-atom); }
+.cm-s-vsc .cm-number { color: var(--tok-number); }
+.cm-s-vsc .cm-def { color: var(--tok-fn); }            /* functions (defs + calls) */
+.cm-s-vsc .cm-variable { color: var(--tok-var); }
+.cm-s-vsc .cm-variable-2 { color: var(--tok-var); }
+.cm-s-vsc .cm-variable-3 { color: var(--tok-type); }
+.cm-s-vsc .cm-property { color: var(--tok-prop); }
+.cm-s-vsc .cm-operator { color: var(--tok-op); }
+.cm-s-vsc .cm-comment { color: var(--tok-comment); }
+.cm-s-vsc .cm-string { color: var(--tok-string); }
+.cm-s-vsc .cm-string-2 { color: var(--tok-string); }
+.cm-s-vsc .cm-tag { color: var(--tok-tag); }
+.cm-s-vsc .cm-attribute { color: var(--tok-attr); }
+.cm-s-vsc .cm-qualifier { color: var(--tok-attr); }
+.cm-s-vsc .cm-builtin { color: var(--tok-builtin); }
+.cm-s-vsc .cm-meta { color: var(--tok-meta); }
+.cm-s-vsc .cm-bracket { color: var(--tok-punct); }
+.cm-s-vsc .cm-punctuation { color: var(--tok-punct); }
+.cm-s-vsc .cm-error { color: var(--tok-error); background: rgba(244, 135, 113, 0.1); }
 
 /* Hint dropdown */
 .CodeMirror-hints {

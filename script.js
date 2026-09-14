@@ -233,6 +233,7 @@ let runTimer = null;
 let runSeq = 0;
 let pyodide = null;
 let localAvailable = null;
+let localLangs = new Set();
 const savedCode = {};
 
 // ---------- Setup ----------
@@ -464,6 +465,9 @@ async function runServer(langId, code) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
     });
+    if (res.status === 401) {
+        throw new Error('Piston public API is whitelist-only since 2/15/2026. Start the local runner (node server.js) to use the compilers installed on this machine.');
+    }
     if (res.status === 429) {
         throw new Error('Rate limited by the free Piston API — wait a few seconds and hit Run again.');
     }
@@ -481,20 +485,25 @@ async function runServer(langId, code) {
 }
 
 // ---------- Local runner (optional `node server.js`) ----------
-// Uses Python / Node.js installed on THIS machine, so the modules you
-// already have installed are available. Only reachable at 127.0.0.1.
+// Runs Python / Node.js and every compiled language with the tools installed
+// on THIS machine. Only reachable at 127.0.0.1, so visitors on GitHub Pages
+// can't use it (and Piston's public API is whitelist-only since 2/15/2026).
 async function checkLocal() {
     try {
         const ctrl = new AbortController();
-        const t = setTimeout(() => ctrl.abort(), 700);
-        const res = await fetch(LOCAL_URL + '/health', { signal: ctrl.signal });
+        const t = setTimeout(() => ctrl.abort(), 1200);
+        const res = await fetch(LOCAL_URL + '/langs', { signal: ctrl.signal });
         clearTimeout(t);
-        localAvailable = res.ok;
+        if (!res.ok) throw new Error('bad status');
+        const d = await res.json();
+        localAvailable = true;
+        localLangs = new Set(d.langs || []);
     } catch (e) {
         localAvailable = false;
+        localLangs = new Set();
     }
     setStatus(localAvailable
-        ? 'Local engine: ON — Python/Node.js use your installed modules'
+        ? 'Local engine: ON — ' + localLangs.size + ' languages use your installed tools'
         : 'Ready');
     return localAvailable;
 }
@@ -546,11 +555,13 @@ async function run() {
             }
             showResult(stdout);
         } else if (def.mode === 'server') {
-            if (currentLangId === 'node' && localAvailable) {
-                setStatus('Running Node.js (local)…', true);
-                const r = await runLocal('node', code);
+            if (localAvailable && localLangs.has(currentLangId)) {
+                setStatus('Running ' + def.name + ' (local)…', true);
+                const r = await runLocal(currentLangId, code);
                 stdout = r.stdout;
                 stderr = r.stderr;
+            } else if (localAvailable) {
+                stderr = 'No local tool for ' + def.name + ' right now. Install it (or start with node server.js).';
             } else {
                 setStatus('Running on server…', true);
                 const r = await runServer(currentLangId, code);
@@ -578,6 +589,7 @@ if (lastLang && LANGS[lastLang]) langSel.value = lastLang;
 
 editor = CodeMirror.fromTextArea(editorEl, {
     mode: CM_MODES[langSel.value],
+    theme: 'vsc',
     lineNumbers: true,
     lineWrapping: false,
     tabSize: 4,

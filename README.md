@@ -10,11 +10,13 @@ colors. Dark / Light theme toggle included.
 - **C, C++, C#, Java, Go, Rust, PHP, Ruby, TypeScript, Node.js** — run via
   Piston's free API (https://emkc.org) when no local server is running.
 
-## Use your own installed modules (Python / Node.js)
+## Use your own installed tools and modules
 
-The playground detects the included local runner and runs Python and Node.js
-with the tools already installed on **your** machine — so any module you have
-installed (pip, conda, or `npm i -g`) works.
+The included local runner executes every language with the compilers / runtimes
+that are **already installed on your machine** — Python and Node.js get your pip
+modules and globally installed npm packages (`node server.js` sets `NODE_PATH`
+to your global npm folder), and any compiler you have (gcc/g++, javac+java, go,
+rustc, php, ruby, tsc+node, csc or dotnet SDK) is used automatically.
 
 Start it once in a terminal from this folder:
 
@@ -23,12 +25,15 @@ node server.js
 ```
 
 It listens on `http://127.0.0.1:8787` only. The status bar shows
-`Local engine: ON` when the playground finds it.
-Browser Python and the Piston server are automatic fallbacks if it's off.
+`Local engine: ON — N languages use your installed tools` when the playground
+finds it, and only the languages whose tools are installed are listed. The
+startup banner prints exactly which ones were detected on your machine.
+
+> Piston's public API became whitelist-only on 2/15/2026, so without this local
+> runner, server-side languages need a self-hosted Piston instance.
 
 > Security: this server executes arbitrary code on your computer. Keep it on
-> your own machine and environment (`NODE_PATH` is set to your global npm
-> folder so globally installed packages resolve).
+> your own machine — it binds to 127.0.0.1 and is not meant to be deployed.
 
 ## Editor features
 

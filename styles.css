@@ -1,15 +1,93 @@
 :root {
-    --bg: #0b1120;
-    --bg-alt: #0f1830;
-    --surface: #121b33;
-    --text: #e2e8f0;
-    --text-dim: #94a3b8;
-    --accent: #38bdf8;
-    --accent-dark: #0ea5e9;
-    --border: #1e293b;
-    --green: #34d399;
-    --red: #f87171;
-    --font-mono: 'JetBrains Mono', Consolas, 'Courier New', monospace;
+    /* Chrome — VS Code Dark+ colors */
+    --bg: #1e1e1e;
+    --bg-alt: #252526;
+    --surface: #2d2d30;
+    --border: #3c3c3c;
+    --text: #d4d4d4;
+    --text-dim: #9d9d9d;
+    --accent: #569cd6;
+    --accent-dark: #4fc1ff;
+    --on-accent: #0d1f2e;
+    --green: #89d185;
+    --red: #f48771;
+    --cyan: #4ec9b0;
+    --linenum: #606060;
+    --selection: rgba(86, 156, 214, 0.32);
+    --activeline: rgba(255, 255, 255, 0.06);
+    --caret: #aeafad;
+    --match-bg: rgba(209, 147, 122, 0.18);
+    --match-outline: #575857;
+    --err-bg: #38130f;
+    --err-border: rgba(244, 135, 113, 0.35);
+    --err-text: #f48771;
+    --hint-bg: #252526;
+    --hint-shadow: rgba(0, 0, 0, 0.5);
+    --preview-bg: #ffffff;
+
+    /* Syntax tokens — VS Code Dark+ */
+    --tok-keyword: #569cd6;
+    --tok-string: #ce9178;
+    --tok-number: #b5cea8;
+    --tok-comment: #6a9955;
+    --tok-fn: #dcdcaa;
+    --tok-type: #4ec9b0;
+    --tok-var: #9cdcfe;
+    --tok-prop: #9cdcfe;
+    --tok-tag: #569cd6;
+    --tok-attr: #9cdcfe;
+    --tok-atom: #569cd6;
+    --tok-op: #d4d4d4;
+    --tok-punct: #d4d4d4;
+    --tok-meta: #569cd6;
+    --tok-builtin: #dcdcaa;
+    --tok-error: #f48771;
+}
+
+body[data-theme="light"] {
+    /* Chrome — VS Code Light+ */
+    --bg: #ffffff;
+    --bg-alt: #f3f3f3;
+    --surface: #f9f9f9;
+    --border: #d4d4d4;
+    --text: #000000;
+    --text-dim: #6a6a6a;
+    --accent: #0078d4;
+    --accent-dark: #0060a0;
+    --on-accent: #ffffff;
+    --green: #1e8e3e;
+    --red: #e51400;
+    --cyan: #267f99;
+    --linenum: #858585;
+    --selection: rgba(0, 120, 212, 0.25);
+    --activeline: rgba(0, 0, 0, 0.045);
+    --caret: #000000;
+    --match-bg: rgba(0, 0, 0, 0.14);
+    --match-outline: #c8c8c8;
+    --err-bg: #fdedec;
+    --err-border: rgba(229, 20, 0, 0.3);
+    --err-text: #b3261e;
+    --hint-bg: #ffffff;
+    --hint-shadow: rgba(0, 0, 0, 0.18);
+    --preview-bg: #ffffff;
+
+    /* Syntax tokens — VS Code Light+ */
+    --tok-keyword: #0000ff;
+    --tok-string: #a31515;
+    --tok-number: #098658;
+    --tok-comment: #008000;
+    --tok-fn: #795e26;
+    --tok-type: #267f99;
+    --tok-var: #001080;
+    --tok-prop: #267f99;
+    --tok-tag: #800000;
+    --tok-attr: #e50000;
+    --tok-atom: #0000ff;
+    --tok-op: #000000;
+    --tok-punct: #000000;
+    --tok-meta: #0000ff;
+    --tok-builtin: #795e26;
+    --tok-error: #e51400;
 }
 
 * {
@@ -29,6 +107,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
+    transition: background 0.18s, color 0.18s;
 }
 
 /* ---------- Top bar ---------- */
@@ -86,25 +165,37 @@ body {
 }
 
 #lang option {
-    background: var(--surface);
+    background: var(--hint-bg);
     color: var(--text);
 }
 
 .btn {
     background: var(--accent);
-    color: #062433;
+    color: var(--on-accent);
     border: none;
     border-radius: 8px;
     padding: 0.45rem 1.1rem;
     font-weight: 600;
     font-size: 0.9rem;
     cursor: pointer;
-    transition: background 0.15s, transform 0.15s;
+    transition: background 0.15s, border-color 0.15s, transform 0.15s;
 }
 
 .btn:hover {
     background: var(--accent-dark);
     transform: translateY(-1px);
+}
+
+.btn--ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+}
+
+.btn--ghost:hover {
+    border-color: var(--accent);
+    background: transparent;
+    color: var(--accent);
 }
 
 .status {
@@ -123,7 +214,7 @@ body {
 .split {
     flex: 1;
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 2fr 1fr; /* result panel is half the editor's width */
     min-height: 0;
 }
 
@@ -172,61 +263,117 @@ body {
 
 .badge--live {
     color: var(--green);
-    border-color: rgba(52, 211, 153, 0.4);
+    border-color: rgba(137, 209, 133, 0.4);
 }
 
-/* ---------- Editor ---------- */
+/* ---------- Editor (CodeMirror, VS Code tokens) ---------- */
 .editor {
     flex: 1;
     position: relative;
-    display: flex;
     min-height: 0;
     overflow: hidden;
 }
 
-.gutter {
-    width: 48px;
-    flex-shrink: 0;
-    padding: 12px 8px;
+.CodeMirror {
+    height: 100%;
+    font-family: var(--font-mono);
+    font-size: 14px;
+    line-height: 1.55;
     background: var(--bg);
-    color: #334155;
-    text-align: right;
-    font-family: var(--font-mono);
-    font-size: 14px;
-    line-height: 1.55;
-    overflow: hidden;
-    user-select: none;
-    border-right: 1px solid var(--border);
-}
-
-#editor {
-    flex: 1;
-    background: transparent;
-    border: none;
-    outline: none;
-    resize: none;
     color: var(--text);
-    font-family: var(--font-mono);
-    font-size: 14px;
-    line-height: 1.55;
-    padding: 12px 16px;
-    white-space: pre;
-    overflow: auto;
-    tab-size: 4;
 }
 
-#editor::selection {
-    background: rgba(56, 189, 248, 0.25);
+.CodeMirror-gutters {
+    background: var(--bg);
+    border-right: 1px solid var(--border);
+    color: var(--linenum);
 }
 
-.hint {
+.CodeMirror-linenumber {
+    color: var(--linenum);
+}
+
+.CodeMirror-activeline .CodeMirror-linenumber {
+    color: var(--text);
+}
+
+.CodeMirror-cursor {
+    border-left: 2px solid var(--caret);
+}
+
+.CodeMirror-selected,
+.CodeMirror-focused .CodeMirror-selected {
+    background: var(--selection);
+}
+
+.CodeMirror-activeline-background {
+    background: var(--activeline);
+}
+
+.CodeMirror-matchingbracket {
+    color: var(--text) !important;
+    background: var(--match-bg);
+    outline: 1px solid var(--match-outline);
+}
+
+.CodeMirror-nonmatchingbracket {
+    color: var(--tok-error) !important;
+}
+
+/* Syntax token colors (VS Code palette) */
+.cm-keyword { color: var(--tok-keyword); }
+.cm-atom { color: var(--tok-atom); }
+.cm-number { color: var(--tok-number); }
+.cm-def { color: var(--tok-fn); }
+.cm-variable { color: var(--tok-var); }
+.cm-variable-2 { color: var(--tok-var); }
+.cm-variable-3 { color: var(--tok-type); }
+.cm-property { color: var(--tok-prop); }
+.cm-operator { color: var(--tok-op); }
+.cm-comment { color: var(--tok-comment); }
+.cm-string { color: var(--tok-string); }
+.cm-string-2 { color: var(--tok-string); }
+.cm-tag { color: var(--tok-tag); }
+.cm-attribute { color: var(--tok-attr); }
+.cm-qualifier { color: var(--tok-attr); }
+.cm-builtin { color: var(--tok-builtin); }
+.cm-meta { color: var(--tok-meta); }
+.cm-bracket { color: var(--tok-punct); }
+.cm-punctuation { color: var(--tok-punct); }
+.cm-error { color: var(--tok-error); background: rgba(244, 135, 113, 0.1); }
+
+/* Hint dropdown */
+.CodeMirror-hints {
     position: absolute;
-    right: 8px;
-    bottom: 6px;
-    font-size: 0.68rem;
-    color: #334155;
-    pointer-events: none;
+    z-index: 10;
+    overflow: hidden;
+    list-style: none;
+    margin: 0;
+    padding: 3px 0;
+    background: var(--hint-bg);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px var(--hint-shadow);
     font-family: var(--font-mono);
+    font-size: 13px;
+    max-height: 200px;
+}
+
+.CodeMirror-hint {
+    padding: 4px 12px;
+    white-space: pre;
+    color: var(--text);
+    cursor: pointer;
+}
+
+li.CodeMirror-hint-active {
+    background: var(--accent);
+    color: var(--on-accent);
+    border-radius: 4px;
+}
+
+.CodeMirror-line {
+    padding-left: 2px;
 }
 
 /* ---------- Output ---------- */
@@ -245,7 +392,7 @@ body {
     width: 100%;
     height: 100%;
     border: none;
-    background: #fff;
+    background: var(--preview-bg);
 }
 
 .console {
@@ -269,7 +416,7 @@ body {
     font-family: var(--font-mono);
     font-size: 0.72rem;
     color: var(--accent);
-    background: rgba(11, 17, 32, 0.85);
+    background: var(--surface);
     border: 1px solid var(--border);
     padding: 4px 10px;
     border-radius: 999px;
@@ -277,8 +424,8 @@ body {
 }
 
 .error-panel {
-    border-top: 1px solid rgba(248, 113, 113, 0.4);
-    background: #1a0f14;
+    border-top: 1px solid var(--err-border);
+    background: var(--err-bg);
     max-height: 34%;
     display: flex;
     flex-direction: column;
@@ -287,9 +434,9 @@ body {
 .error-head {
     font-family: var(--font-mono);
     font-size: 0.72rem;
-    color: var(--red);
+    color: var(--err-text);
     padding: 8px 16px;
-    border-bottom: 1px solid rgba(248, 113, 113, 0.25);
+    border-bottom: 1px solid var(--err-border);
     text-transform: uppercase;
     letter-spacing: 0.06em;
 }
@@ -298,7 +445,7 @@ body {
     flex: 1;
     margin: 0;
     padding: 10px 16px;
-    color: #fca5a5;
+    color: var(--err-text);
     font-family: var(--font-mono);
     font-size: 12.5px;
     line-height: 1.5;

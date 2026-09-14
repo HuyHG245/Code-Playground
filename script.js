@@ -1,7 +1,7 @@
-const editor = document.getElementById('editor');
-const gutter = document.getElementById('gutter');
+const editorEl = document.getElementById('editor');
 const langSel = document.getElementById('lang');
 const runBtn = document.getElementById('runBtn');
+const themeBtn = document.getElementById('themeBtn');
 const preview = document.getElementById('preview');
 const consoleEl = document.getElementById('console');
 const loadingEl = document.getElementById('loading');
@@ -13,29 +13,32 @@ const fileNameEl = document.getElementById('fileName');
 
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
+const LOCAL_URL = 'http://127.0.0.1:8787';
 
-const LANGS = {
-    html:       { name: 'HTML',           file: 'index.html', mode: 'html',   lang: null,        preset: htmlPreset },
-    javascript: { name: 'JavaScript',     file: 'script.js',  mode: 'js',     lang: null,        preset: jsPreset },
-    python:     { name: 'Python',         file: 'main.py',    mode: 'pyb',    lang: null,        preset: pyPreset },
-    typescript: { name: 'TypeScript',     file: 'main.ts',    mode: 'server', lang: 'typescript', preset: tsPreset },
-    node:       { name: 'Node.js',        file: 'main.js',    mode: 'server', lang: 'javascript', preset: nodePreset },
-    c:          { name: 'C',              file: 'main.c',     mode: 'server', lang: 'c',          preset: cPreset },
-    cpp:        { name: 'C++',            file: 'main.cpp',   mode: 'server', lang: 'c++',        preset: cppPreset },
-    csharp:     { name: 'C#',             file: 'main.cs',    mode: 'server', lang: 'csharp',     preset: csPreset },
-    java:       { name: 'Java',           file: 'Main.java',  mode: 'server', lang: 'java',       preset: javaPreset },
-    go:         { name: 'Go',             file: 'main.go',    mode: 'server', lang: 'go',         preset: goPreset },
-    rust:       { name: 'Rust',           file: 'main.rs',    mode: 'server', lang: 'rust',       preset: rustPreset },
-    php:        { name: 'PHP',            file: 'main.php',   mode: 'server', lang: 'php',        preset: phpPreset },
-    ruby:       { name: 'Ruby',           file: 'main.rb',    mode: 'server', lang: 'ruby',       preset: rubyPreset },
+// ---------- Per-language config ----------
+const CM_MODES = {
+    html: 'htmlmixed', javascript: 'javascript', python: 'python',
+    typescript: 'javascript', node: 'javascript',
+    c: 'text/x-csrc', cpp: 'text/x-c++src', csharp: 'text/x-csharp',
+    java: 'text/x-java', go: 'text/x-csrc', rust: 'text/x-csrc',
+    php: 'application/x-httpd-php', ruby: 'ruby',
 };
 
-const DELAY = { html: 500, js: 600, pyb: 900, server: 1400 };
-
-const savedCode = {};
-let runTimer = null;
-let runSeq = 0;
-let pyodide = null;
+const KW = {
+    html: ['a','abbr','address','article','aside','audio','b','base','body','br','button','canvas','code','div','em','fieldset','footer','form','h1','h2','h3','h4','h5','h6','head','header','hr','html','iframe','img','input','label','li','link','main','meta','nav','ol','option','p','picture','pre','script','section','select','source','span','strong','style','svg','table','tbody','td','textarea','th','thead','title','tr','ul','video','class','id','src','href','alt','onclick','onload','onchange','display','flex','block','inline','margin','padding','background','color','font-family','font-size','width','height','position','border','border-radius','box-shadow','align-items','justify-content','grid','gap','text-decoration','cursor'],
+    javascript: ['const','let','var','function','return','if','else','for','while','do','switch','case','break','continue','class','extends','super','new','this','typeof','instanceof','in','of','try','catch','finally','throw','import','from','export','default','async','await','null','undefined','true','false','console','log','warn','error','document','window','alert','Math','JSON','Object','Array','String','Number','Boolean','Promise','setTimeout','setInterval','clearTimeout','map','filter','reduce','forEach','push','pop','length','join','split','indexOf','includes','slice','splice','find','some','every','Date','parseInt','parseFloat','isNaN','NaN','Infinity'],
+    python: ['def','return','if','elif','else','for','while','import','from','class','try','except','finally','with','as','in','not','and','or','None','True','False','lambda','self','break','continue','pass','global','yield','print','input','len','range','str','int','float','bool','list','dict','set','tuple','enumerate','zip','sorted','sum','min','max','abs','round','open','type','isinstance','math','random','datetime','json','os','sys','re','time'],
+    typescript: ['const','let','var','function','return','if','else','for','while','switch','case','break','continue','class','interface','type','enum','extends','implements','new','this','typeof','keyof','in','of','try','catch','finally','throw','import','from','export','default','async','await','readonly','public','private','protected','number','string','boolean','void','any','never','unknown','null','undefined','true','false','console','log','error','Math','JSON','Object','Array','String','Number','Boolean','Promise','map','filter','reduce','forEach'],
+    node: ['const','let','var','function','return','if','else','for','while','do','switch','case','break','continue','try','catch','finally','throw','import','from','require','module','exports','process','__dirname','__filename','global','Buffer','console','log','error','warn','setTimeout','clearTimeout','setInterval','Promise','async','await','null','undefined','true','false','new','this','typeof','instanceof'],
+    c: ['#include','main','int','void','char','float','double','long','short','unsigned','signed','return','if','else','for','while','do','switch','case','default','break','continue','struct','union','enum','typedef','static','const','extern','sizeof','printf','scanf','malloc','calloc','free','stdio.h','stdlib.h','string.h','math.h','NULL','true','false'],
+    cpp: ['#include','main','int','char','float','double','bool','void','long','unsigned','return','if','else','for','while','do','switch','case','default','break','continue','class','public','private','protected','virtual','override','static','const','struct','enum','namespace','using','template','typename','this','new','delete','cout','cin','endl','vector','string','map','set','iterator','std','iostream','algorithm','NULL','nullptr','true','false'],
+    csharp: ['using','namespace','class','interface','public','private','protected','internal','static','void','int','string','bool','double','float','long','var','ref','out','return','if','else','foreach','for','while','do','switch','case','default','break','continue','try','catch','finally','throw','new','this','base','null','true','false','Console','WriteLine','ReadLine','Write','List','Dictionary','Array','System','Math','async','await','Task','readonly'],
+    java: ['public','private','protected','static','final','class','interface','abstract','extends','implements','package','import','void','int','long','float','double','boolean','char','String','return','if','else','for','while','do','switch','case','default','break','continue','try','catch','finally','throw','throws','new','this','super','null','true','false','System','out','println','print','main','args','Math','List','ArrayList','HashMap','Override','instanceof','var'],
+    go: ['package','import','func','main','fmt','Println','Printf','Sprintf','Print','var','const','type','struct','interface','string','int','int32','int64','float32','float64','bool','byte','rune','nil','true','false','if','else','for','range','switch','case','default','break','continue','goto','return','defer','go','chan','map','make','len','append','cap','copy','new','error'],
+    rust: ['fn','main','let','mut','const','static','if','else','else if','match','for','in','loop','while','return','struct','enum','impl','trait','pub','use','mod','crate','self','Self','super','String','str','Vec','i8','i32','i64','u8','u32','u64','f32','f64','bool','char','true','false','Option','Some','None','Result','Ok','Err','vec!','println!','print!','format!','break','continue','async','await'],
+    php: ['echo','print','print_r','var_dump','function','return','if','else','elseif','foreach','as','for','while','do','switch','case','default','break','continue','class','public','private','protected','static','count','array','isset','empty','unset','include','include_once','require','require_once','new','this','string','int','float','bool','array','object','null','true','false','exit','die','json_encode','json_decode'],
+    ruby: ['def','end','puts','print','p','return','if','elsif','else','unless','while','until','for','in','do','class','module','require','attr_reader','attr_writer','attr_accessor','each','map','select','find','reject','join','push','pop','length','size','true','false','nil','new','self','yield','break','next','case','when','then','private','public','protected'],
+};
 
 // ---------- Presets ----------
 function htmlPreset() {
@@ -45,22 +48,19 @@ function htmlPreset() {
     <meta charset="UTF-8">
     <title>My Page</title>
     <style>
-        body { font-family: sans-serif; padding: 24px; }
+        body { font-family: system-ui, sans-serif; padding: 24px; color: #1f2937; }
         h1 { color: #0ea5e9; }
-        button { padding: 8px 16px; cursor: pointer; font-size: 16px; }
+        .card { border: 1px solid #e5e7eb; border-radius: 12px; padding: 16px; margin-top: 12px; }
+        button { padding: 8px 16px; font-size: 16px; border: none;
+                 border-radius: 8px; background: #0ea5e9; color: #fff; cursor: pointer; }
     </style>
 </head>
 <body>
     <h1>Hello, world!</h1>
-    <button onclick="document.body.style.background = getRandomColor()">Change color</button>
-    <script>
-        function getRandomColor() {
-            const letters = '0123456789ABCDEF';
-            let color = '#';
-            for (let i = 0; i < 6; i++) color += letters[Math.floor(Math.random() * 16)];
-            return color;
-        }
-    <\/script>
+    <div class="card">
+        <p>This is a live HTML preview — the rendered UI appears on the right while you type.</p>
+        <button onclick="this.textContent = 'Clicked! UI updated.'">Click me</button>
+    </div>
 </body>
 </html>`;
 }
@@ -210,6 +210,31 @@ puts "Evens: #{evens.join(", ")}"
 puts "Squares: #{nums.map { |n| n * n }.join(", ")}"`;
 }
 
+const LANGS = {
+    html:       { name: 'HTML',       file: 'index.html', mode: 'html',   lang: null, preset: htmlPreset },
+    javascript: { name: 'JavaScript', file: 'script.js',  mode: 'js',     lang: null, preset: jsPreset },
+    python:     { name: 'Python',     file: 'main.py',    mode: 'pyb',    lang: null, preset: pyPreset },
+    typescript: { name: 'TypeScript', file: 'main.ts',    mode: 'server', lang: 'typescript', preset: tsPreset },
+    node:       { name: 'Node.js',    file: 'main.js',    mode: 'server', lang: 'javascript', preset: nodePreset },
+    c:          { name: 'C',          file: 'main.c',     mode: 'server', lang: 'c',          preset: cPreset },
+    cpp:        { name: 'C++',        file: 'main.cpp',   mode: 'server', lang: 'c++',        preset: cppPreset },
+    csharp:     { name: 'C#',         file: 'main.cs',    mode: 'server', lang: 'csharp',     preset: csPreset },
+    java:       { name: 'Java',       file: 'Main.java',  mode: 'server', lang: 'java',       preset: javaPreset },
+    go:         { name: 'Go',         file: 'main.go',    mode: 'server', lang: 'go',         preset: goPreset },
+    rust:       { name: 'Rust',       file: 'main.rs',    mode: 'server', lang: 'rust',       preset: rustPreset },
+    php:        { name: 'PHP',        file: 'main.php',   mode: 'server', lang: 'php',        preset: phpPreset },
+    ruby:       { name: 'Ruby',       file: 'main.rb',    mode: 'server', lang: 'ruby',       preset: rubyPreset },
+};
+
+const DELAY = { html: 500, js: 600, pyb: 900, server: 1400 };
+
+let currentLangId = 'html';
+let runTimer = null;
+let runSeq = 0;
+let pyodide = null;
+let localAvailable = null;
+const savedCode = {};
+
 // ---------- Setup ----------
 function initLanguages() {
     for (const id in LANGS) {
@@ -220,42 +245,66 @@ function initLanguages() {
     }
 }
 
-// ---------- Editor helpers ----------
-function updateGutter() {
-    const count = Math.min(editor.value.split('\n').length, 5000);
-    let html = '';
-    for (let i = 1; i <= count; i++) html += i + '\n';
-    gutter.textContent = html;
+function persist(key, value) {
+    try { localStorage.setItem(key, value); } catch (err) { /* ignore */ }
 }
 
-editor.addEventListener('scroll', () => {
-    gutter.scrollTop = editor.scrollTop;
-});
+function load(key) {
+    try { return localStorage.getItem(key); } catch (err) { return null; }
+}
 
-editor.addEventListener('input', () => {
-    updateGutter();
-    scheduleRun();
-});
+// ---------- Editor ----------
+let editor;
 
-editor.addEventListener('keydown', (e) => {
-    if (e.key === 'Tab') {
-        e.preventDefault();
-        const s = editor.selectionStart;
-        const en = editor.selectionEnd;
-        editor.setRangeText('  ', s, en, 'end');
-        updateGutter();
-        scheduleRun();
-    } else if (e.key === 'Enter' && e.ctrlKey) {
-        e.preventDefault();
-        run();
-    }
-});
+function applyLanguage(id) {
+    const def = LANGS[id];
+    if (!def) return;
+    const existing = savedCode[id] !== undefined ? savedCode[id] : load('playground-' + id);
+    editor.setValue(existing != null && existing !== '' ? existing : def.preset());
+    savedCode[id] = editor.getValue();
+    editor.setOption('mode', CM_MODES[id]);
+    fileNameEl.textContent = def.file;
+    currentLangId = id;
+}
 
-// ---------- Scheduling ----------
+// Custom autocomplete: keywords + what you've already typed
+function hintWords(cm) {
+    const cur = cm.getCursor();
+    const line = cm.getLine(cur.line);
+    let from = cur.ch;
+    const m = /[\w$]*$/.exec(line.slice(0, cur.ch));
+    if (m && m[0]) from = cur.ch - m[0].length;
+    const prefix = line.slice(from, cur.ch);
+    if (!prefix) return null;
+
+    const words = new Set(KW[currentLangId] || []);
+    const m2 = cm.getValue().match(/[A-Za-z_$][\w$]*/g);
+    if (m2) for (const w of m2) words.add(w);
+
+    const list = [...words]
+        .filter(w => w !== prefix && w.toLowerCase().startsWith(prefix.toLowerCase()))
+        .sort()
+        .slice(0, 40);
+    if (!list.length) return null;
+    return { list, from: CodeMirror.Pos(cur.line, from), to: CodeMirror.Pos(cur.line, cur.ch) };
+}
+
+function maybeAutoHint(cm, change) {
+    if (cm.state.completionActive) return;
+    const lastText = change.text[change.text.length - 1];
+    if (!lastText || !/[\w$]/.test(lastText[lastText.length - 1])) return;
+    const tok = cm.getTokenAt(cm.getCursor());
+    if (tok.type && (tok.type.indexOf('string') !== -1 || tok.type.indexOf('comment') !== -1)) return;
+    CodeMirror.showHint(cm);
+}
+
 function scheduleRun() {
-    const mode = LANGS[langSel.value].mode;
     clearTimeout(runTimer);
-    runTimer = setTimeout(run, DELAY[mode]);
+    runTimer = setTimeout(run, DELAY[LANGS[currentLangId].mode]);
+}
+
+function persistCode() {
+    persist('playground-' + currentLangId, editor.getValue());
 }
 
 // ---------- Status / panels ----------
@@ -404,7 +453,7 @@ const SERVER_FILES = {
     php: 'main.php', ruby: 'main.rb',
 };
 
-async function runServer(langId, langName, code) {
+async function runServer(langId, code) {
     const payload = {
         language: LANGS[langId].lang,
         version: '*',
@@ -431,11 +480,44 @@ async function runServer(langId, langName, code) {
     return { stdout: runOut, stderr: compileErr || runErr };
 }
 
+// ---------- Local runner (optional `node server.js`) ----------
+// Uses Python / Node.js installed on THIS machine, so the modules you
+// already have installed are available. Only reachable at 127.0.0.1.
+async function checkLocal() {
+    try {
+        const ctrl = new AbortController();
+        const t = setTimeout(() => ctrl.abort(), 700);
+        const res = await fetch(LOCAL_URL + '/health', { signal: ctrl.signal });
+        clearTimeout(t);
+        localAvailable = res.ok;
+    } catch (e) {
+        localAvailable = false;
+    }
+    setStatus(localAvailable
+        ? 'Local engine: ON — Python/Node.js use your installed modules'
+        : 'Ready');
+    return localAvailable;
+}
+
+async function runLocal(runLang, code) {
+    const res = await fetch(LOCAL_URL + '/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lang: runLang, code }),
+    });
+    if (!res.ok) throw new Error('Local runner error ' + res.status);
+    const d = await res.json();
+    if (d.error) throw new Error(d.error);
+    let stderr = d.stderr || '';
+    if (d.timedOut && !stderr) stderr = 'Timed out after 20s';
+    if (d.code && d.code !== 0 && !stderr) stderr = 'Process exited with code ' + d.code;
+    return { stdout: d.stdout || '', stderr };
+}
+
 // ---------- Main run ----------
 async function run() {
-    const id = langSel.value;
-    const def = LANGS[id];
-    const code = editor.value;
+    const def = LANGS[currentLangId];
+    const code = editor.getValue();
     const seq = ++runSeq;
     showError('');
     setLoading(true);
@@ -452,15 +534,29 @@ async function run() {
             stderr = r.stderr;
             showResult(stdout);
         } else if (def.mode === 'pyb') {
-            const r = await runPython(code);
-            stdout = r.stdout;
-            stderr = r.stderr;
+            if (localAvailable) {
+                setStatus('Running Python (local)…', true);
+                const r = await runLocal('python', code);
+                stdout = r.stdout;
+                stderr = r.stderr;
+            } else {
+                const r = await runPython(code);
+                stdout = r.stdout;
+                stderr = r.stderr;
+            }
             showResult(stdout);
         } else if (def.mode === 'server') {
-            setStatus('Running on server…', true);
-            const r = await runServer(id, def.name, code);
-            stdout = r.stdout;
-            stderr = r.stderr;
+            if (currentLangId === 'node' && localAvailable) {
+                setStatus('Running Node.js (local)…', true);
+                const r = await runLocal('node', code);
+                stdout = r.stdout;
+                stderr = r.stderr;
+            } else {
+                setStatus('Running on server…', true);
+                const r = await runServer(currentLangId, code);
+                stdout = r.stdout;
+                stderr = r.stderr;
+            }
             showResult(stdout);
         }
     } catch (err) {
@@ -475,42 +571,61 @@ async function run() {
     runTimeEl.textContent = (performance.now() - started).toFixed(0) + ' ms';
 }
 
-runBtn.addEventListener('click', run);
+// ---------- Init ----------
+initLanguages();
+const lastLang = load('playground-lang');
+if (lastLang && LANGS[lastLang]) langSel.value = lastLang;
 
-// ---------- Language switching ----------
-function persist(key, value) {
-    try { localStorage.setItem(key, value); } catch (err) { /* ignore */ }
-}
+editor = CodeMirror.fromTextArea(editorEl, {
+    mode: CM_MODES[langSel.value],
+    lineNumbers: true,
+    lineWrapping: false,
+    tabSize: 4,
+    indentUnit: 2,
+    indentWithTabs: false,
+    autoCloseBrackets: true,
+    autoCloseTags: true,
+    matchBrackets: true,
+    styleActiveLine: true,
+    hintOptions: { hint: hintWords, completeSingle: false },
+    extraKeys: {
+        'Ctrl-Space': 'autocomplete',
+        'Ctrl-Enter': () => run(),
+    },
+});
 
-function load(key) {
-    try { return localStorage.getItem(key); } catch (err) { return null; }
-}
+editor.on('change', () => {
+    scheduleRun();
+    persistCode();
+});
 
-let currentLangId = 'html';
+editor.on('inputRead', maybeAutoHint);
 
-function applyLanguage(id) {
-    const def = LANGS[id];
-    const savedKey = 'playground-' + id;
-    const existing = savedCode[id] !== undefined ? savedCode[id] : load(savedKey);
-    editor.value = existing != null && existing !== '' ? existing : def.preset();
-    savedCode[id] = editor.value;
-    fileNameEl.textContent = def.file;
-    updateGutter();
-    currentLangId = id;
-}
+editor.on('refresh', () => setStatus('Ready'));
 
 langSel.addEventListener('change', () => {
-    persist('playground-' + currentLangId, savedCode[currentLangId]);
+    persist('playground-' + currentLangId, editor.getValue());
     persist('playground-lang', langSel.value);
     applyLanguage(langSel.value);
     void run();
 });
 
-initLanguages();
-const lastLang = load('playground-lang');
-if (lastLang && LANGS[lastLang]) {
-    langSel.value = lastLang;
+runBtn.addEventListener('click', () => void run());
+
+// ---------- Theme toggle (VS Code Dark+ / Light+) ----------
+function applyTheme(theme) {
+    document.body.setAttribute('data-theme', theme);
+    themeBtn.textContent = theme === 'dark' ? 'Light' : 'Dark';
+    editor.refresh();
 }
+
+themeBtn.addEventListener('click', () => {
+    const next = document.body.getAttribute('data-theme') === 'light' ? 'dark' : 'light';
+    persist('playground-theme', next);
+    applyTheme(next);
+});
+
 applyLanguage(langSel.value);
-editor.addEventListener('input', () => persist('playground-' + currentLangId, editor.value));
+applyTheme(load('playground-theme') === 'light' ? 'light' : 'dark');
 void run();
+void checkLocal();

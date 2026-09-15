@@ -16,13 +16,10 @@
     <header class="topbar">
         <a href="#" class="brand">&lt;CodePlayground /&gt;</a>
         <div class="controls">
-            <label class="lang-wrap">
-                <span class="lang-label">Language</span>
-                <select id="lang"></select>
-            </label>
             <button id="downloadBtn" class="btn btn--ghost" title="Download this script">Download</button>
             <button id="saveBtn" class="btn btn--ghost" disabled title="Sign in to save scripts">Save</button>
             <button id="savedBtn" class="btn btn--ghost" hidden title="Your saved scripts">My Scripts</button>
+            <button id="pkgBtn" class="btn btn--ghost" title="Install bundles / packages for the current language">Packages</button>
             <button id="themeBtn" class="btn btn--ghost" title="Toggle dark / light theme (VS Code colors)">Light</button>
             <button id="runBtn" class="btn" title="Ctrl + Enter">Run</button>
         </div>
@@ -39,8 +36,9 @@
 
     <main class="split">
         <section class="panel editor-panel">
-            <div class="panel-head">
-                <span id="fileName" class="panel-title">index.html</span>
+            <div class="panel-head tabs-head">
+                <div id="tabBar" class="tab-bar"></div>
+                <button id="newTabBtn" class="btn btn--ghost tab-add" title="New tab (+): add a file, the extension picks its language">+</button>
                 <span class="badge badge--live">Live</span>
             </div>
             <div class="editor">
@@ -55,6 +53,11 @@
             <div id="previewWrap" class="preview-wrap">
                 <iframe id="preview" sandbox="allow-scripts allow-modals allow-forms" title="Preview"></iframe>
                 <pre id="console" class="console" hidden></pre>
+                <div id="consoleInputWrap" class="console-input-wrap" hidden>
+                    <span class="console-prompt-char">❯</span>
+                    <span id="consoleInputLabel" class="console-input-label"></span>
+                    <input id="consoleInput" class="console-input" type="text" autocomplete="off" spellcheck="false" aria-label="Console input">
+                </div>
                 <div id="loading" class="loading" hidden>Running…</div>
             </div>
             <div id="errorPanel" class="error-panel" hidden>
@@ -72,6 +75,28 @@
             <button id="githubBtn" class="btn btn--provider">Continue with GitHub</button>
             <button id="facebookBtn" class="btn btn--provider" hidden>Continue with Facebook</button>
             <button id="signInClose" class="btn btn--ghost modal-close">Cancel</button>
+        </div>
+        <div id="newTabModal" class="modal" hidden>
+            <h2>New file</h2>
+            <p class="modal-note">Name it with an extension to pick the language (e.g. <code>app.py</code>). Leave it blank for an <code>Untitled-&#8203;i</code> name and choose the language below.</p>
+            <input id="newTabName" class="text-input" type="text" placeholder="Untitled-1" autocomplete="off" spellcheck="false">
+            <select id="newTabLang" class="text-input select-input" title="Program language"></select>
+            <div class="modal-actions">
+                <button id="newTabConfirm" class="btn">Create</button>
+                <button id="newTabCancel" class="btn btn--ghost">Cancel</button>
+            </div>
+        </div>
+        <div id="pkgModal" class="modal modal--wide" hidden>
+            <h2>Packages <span id="pkgLangName" class="pkg-lang-tag"></span></h2>
+            <p id="pkgNote" class="modal-note"></p>
+            <div id="pkgList" class="pkg-list"></div>
+            <div class="pkg-add">
+                <input id="pkgCustom" class="text-input" type="text" placeholder="custom package or URL" autocomplete="off" spellcheck="false">
+                <button id="pkgInstallBtn" class="btn">Install</button>
+            </div>
+            <div class="modal-actions">
+                <button id="pkgClose" class="btn btn--ghost modal-close">Close</button>
+            </div>
         </div>
         <div id="saveModal" class="modal" hidden>
             <h2>Save script</h2>

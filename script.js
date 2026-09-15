@@ -1,15 +1,19 @@
 const editorEl = document.getElementById('editor');
-const langSel = document.getElementById('lang');
 const runBtn = document.getElementById('runBtn');
 const themeBtn = document.getElementById('themeBtn');
 const preview = document.getElementById('preview');
 const consoleEl = document.getElementById('console');
+const consoleInputWrap = document.getElementById('consoleInputWrap');
+const consoleInputLabel = document.getElementById('consoleInputLabel');
+const consoleInput = document.getElementById('consoleInput');
+let pendingInput = null;
 const loadingEl = document.getElementById('loading');
 const errorPanel = document.getElementById('errorPanel');
 const errorText = document.getElementById('errorText');
 const statusEl = document.getElementById('status');
 const runTimeEl = document.querySelector('.run-time');
-const fileNameEl = document.getElementById('fileName');
+const tabBar = document.getElementById('tabBar');
+const newTabBtn = document.getElementById('newTabBtn');
 const downloadBtn = document.getElementById('downloadBtn');
 const saveBtn = document.getElementById('saveBtn');
 const savedBtn = document.getElementById('savedBtn');
@@ -31,6 +35,19 @@ const savedList = document.getElementById('savedList');
 const googleBtn = document.getElementById('googleBtn');
 const githubBtn = document.getElementById('githubBtn');
 const facebookBtn = document.getElementById('facebookBtn');
+const newTabModal = document.getElementById('newTabModal');
+const newTabName = document.getElementById('newTabName');
+const newTabLang = document.getElementById('newTabLang');
+const newTabConfirmBtn = document.getElementById('newTabConfirm');
+const newTabCancelBtn = document.getElementById('newTabCancel');
+const pkgBtn = document.getElementById('pkgBtn');
+const pkgModal = document.getElementById('pkgModal');
+const pkgLangName = document.getElementById('pkgLangName');
+const pkgNote = document.getElementById('pkgNote');
+const pkgList = document.getElementById('pkgList');
+const pkgCustom = document.getElementById('pkgCustom');
+const pkgInstallBtn = document.getElementById('pkgInstallBtn');
+const pkgCloseBtn = document.getElementById('pkgClose');
 
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
@@ -249,24 +266,185 @@ const LANGS = {
 
 const DELAY = { html: 500, js: 600, pyb: 900, server: 1400 };
 
+// ---------- Tabs ----------
+const EXT_LANG = {
+    html: 'html', htm: 'html',
+    js: 'javascript', mjs: 'javascript', cjs: 'node',
+    py: 'python', ts: 'typescript',
+    c: 'c', h: 'c', cpp: 'cpp', cc: 'cpp', hpp: 'cpp',
+    cs: 'csharp', java: 'java', go: 'go', rs: 'rust',
+    php: 'php', rb: 'ruby',
+};
+
+const FILE_MIME = {
+    html: 'text/html', htm: 'text/html',
+    js: 'text/javascript', mjs: 'text/javascript', cjs: 'text/javascript',
+    py: 'text/x-python', ts: 'application/typescript',
+    c: 'text/x-c', h: 'text/x-c', cpp: 'text/x-c++src', cc: 'text/x-c++src', hpp: 'text/x-c++src',
+    cs: 'text/plain', java: 'text/x-java', go: 'text/x-go', rs: 'text/x-rust',
+    php: 'text/php', rb: 'text/x-ruby',
+};
+
 let currentLangId = 'html';
 let runTimer = null;
 let runSeq = 0;
 let pyodide = null;
 let localAvailable = null;
 let localLangs = new Set();
-const savedCode = {};
 
-// ---------- Setup ----------
-function initLanguages() {
-    for (const id in LANGS) {
-        const opt = document.createElement('option');
-        opt.value = id;
-        opt.textContent = LANGS[id].name;
-        langSel.appendChild(opt);
-    }
+let tabs = [];
+let activeTabId = null;
+let tabsTimer = null;
+
+function activeTab() { return tabs.find(t => t.id === activeTabId) || null; }
+
+function langFromName(name) {
+    const m = /\.([A-Za-z0-9]+)$/.exec(name || '');
+    const ext = m ? m[1].toLowerCase() : '';
+    return EXT_LANG[ext] || null;
 }
 
+function nextUntitledName(ext) {
+    ext = ext || FILE_EXT[currentLangId] || 'py';
+    let i = 1;
+    while (tabs.some(t => {
+        const n = t.name.toLowerCase();
+        return n === ('untitled-' + i) || n === ('untitled-' + i + '.' + ext).toLowerCase();
+    })) i++;
+    return 'Untitled-' + i;
+}
+
+function ensureExtension(name, langId) {
+    return /\.[A-Za-z0-9]+$/.test(name) ? name : name + '.' + (FILE_EXT[langId] || 'txt');
+}
+
+function createTab(name, langId, code) {
+    const id = 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    const resolvedLang = langId || langFromName(name) || 'html';
+    const tab = {
+        id,
+        name: ensureExtension(name, resolvedLang),
+        langId: resolvedLang,
+        code: code !== undefined ? code : LANGS[resolvedLang].preset(),
+    };
+    tabs.push(tab);
+    schedulePersistTabs();
+    return tab;
+}
+
+function activateTab(id) {
+    const t = tabs.find(t => t.id === id);
+    if (!t) return;
+    if (activeTab() && editor) activeTab().code = editor.getValue();
+    activeTabId = id;
+    currentLangId = t.langId;
+    editor.setOption('mode', CM_MODES[t.langId]);
+    editor.setValue(t.code);
+    editor.refresh();
+    persistActive();
+    renderTabs();
+    void run();
+}
+
+function renameActiveTab(name) {
+    const t = activeTab();
+    if (!t || !name || !name.trim()) { renderTabs(); return; }
+    name = name.trim();
+    const langId = langFromName(name);
+    if (langId && langId !== t.langId) {
+        t.langId = langId;
+        currentLangId = langId;
+        editor.setOption('mode', CM_MODES[langId]);
+        void run();
+    }
+    t.name = name;
+    renderTabs();
+    schedulePersistTabs();
+}
+
+function closeTab(id) {
+    if (tabs.length <= 1) return;
+    const idx = tabs.findIndex(t => t.id === id);
+    if (idx === -1) return;
+    tabs.splice(idx, 1);
+    if (activeTabId === id) {
+        const next = tabs[Math.min(idx, tabs.length - 1)];
+        activeTabId = next.id;
+        currentLangId = next.langId;
+        editor.setOption('mode', CM_MODES[next.langId]);
+        editor.setValue(next.code);
+        editor.refresh();
+        renderTabs();
+        persistActive();
+        void run();
+    } else {
+        renderTabs();
+    }
+    schedulePersistTabs();
+}
+
+function persistTabs() {
+    persist('playground-tabs', JSON.stringify(tabs.map(t => ({ id: t.id, name: t.name, langId: t.langId, code: t.code }))));
+}
+
+function schedulePersistTabs() {
+    clearTimeout(tabsTimer);
+    tabsTimer = setTimeout(persistTabs, 400);
+}
+
+function persistActive() {
+    persist('playground-active-tab', activeTabId);
+}
+
+function renderTabs() {
+    tabBar.textContent = '';
+    tabs.forEach((t) => {
+        const el = document.createElement('div');
+        el.className = 'tab' + (t.id === activeTabId ? ' active' : '');
+        el.title = t.name;
+        const name = document.createElement('span');
+        name.className = 'tab-name';
+        name.textContent = t.name;
+        name.addEventListener('click', () => activateTab(t.id));
+        name.addEventListener('dblclick', (e) => {
+            e.stopPropagation();
+            startRename(el, name, t);
+        });
+        el.appendChild(name);
+        if (tabs.length > 1) {
+            const x = document.createElement('span');
+            x.className = 'tab-x';
+            x.textContent = '×';
+            x.title = 'Close tab';
+            x.addEventListener('click', (e) => {
+                e.stopPropagation();
+                closeTab(t.id);
+            });
+            el.appendChild(x);
+        }
+        tabBar.appendChild(el);
+    });
+}
+
+function startRename(tabEl, nameEl, t) {
+    const input = document.createElement('input');
+    input.className = 'tab-rename-input';
+    input.value = t.name;
+    tabEl.replaceChild(input, nameEl);
+    input.focus();
+    input.select();
+    let done = false;
+    const commit = () => { if (done) return; done = true; renameActiveTab(input.value); };
+    const cancel = () => { if (done) return; done = true; renderTabs(); };
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        else if (e.key === 'Escape') { e.preventDefault(); cancel(); }
+        e.stopPropagation();
+    });
+    input.addEventListener('blur', commit);
+}
+
+// ---------- Persistence helpers ----------
 function persist(key, value) {
     try { localStorage.setItem(key, value); } catch (err) { /* ignore */ }
 }
@@ -278,15 +456,37 @@ function load(key) {
 // ---------- Editor ----------
 let editor;
 
-function applyLanguage(id) {
-    const def = LANGS[id];
-    if (!def) return;
-    const existing = savedCode[id] !== undefined ? savedCode[id] : load('playground-' + id);
-    editor.setValue(existing != null && existing !== '' ? existing : def.preset());
-    savedCode[id] = editor.getValue();
-    editor.setOption('mode', CM_MODES[id]);
-    fileNameEl.textContent = def.file;
-    currentLangId = id;
+function bootTabs() {
+    const raw = load('playground-tabs');
+    if (raw) {
+        try {
+            tabs = JSON.parse(raw)
+                .map((o, i) => {
+                    const langId = LANGS[o.langId] && o.langId ? o.langId : (langFromName(o.name) || 'html');
+                    return {
+                        id: o.id || 't' + i,
+                        name: o.name || LANGS[langId].file,
+                        langId,
+                        code: (o.code !== undefined && o.code !== '') ? o.code : LANGS[langId].preset(),
+                    };
+                })
+                .filter(Boolean);
+        } catch (err) { tabs = []; }
+    }
+    if (!tabs.length) {
+        const lastLang = load('playground-lang');
+        const langId = LANGS[lastLang] ? lastLang : 'html';
+        const legacy = load('playground-' + langId);
+        tabs = [{
+            id: 't0',
+            name: LANGS[langId].file,
+            langId,
+            code: legacy && legacy.trim() ? legacy : LANGS[langId].preset(),
+        }];
+    }
+    const lastActive = load('playground-active-tab');
+    activeTabId = tabs.some(t => t.id === lastActive) ? lastActive : tabs[0].id;
+    currentLangId = activeTab().langId;
 }
 
 // Custom autocomplete: keywords + what you've already typed
@@ -326,7 +526,8 @@ function scheduleRun() {
 }
 
 function persistCode() {
-    persist('playground-' + currentLangId, editor.getValue());
+    if (activeTab()) activeTab().code = editor.getValue();
+    schedulePersistTabs();
 }
 
 // ---------- Status / panels ----------
@@ -442,16 +643,121 @@ async function getPyodide() {
     return pyodide;
 }
 
-async function runPython(code) {
+function showConsoleInput(promptText, resolve) {
+    consoleInputLabel.textContent = promptText;
+    consoleInputWrap.hidden = false;
+    consoleInput.value = '';
+    setStatus('Waiting for input…', true);
+    consoleInput.focus();
+    pendingInput = resolve;
+}
+
+// Rewrites `input(...)` calls into `await __py_input__(...)`, wraps the whole
+// program in an async function, and runs it with runPythonAsync. That lets the
+// page stay responsive so input() can be typed in the console panel instead of
+// blocking on a native browser prompt().
+const PY_INPUT_TRANSFORM = `
+import io, sys, tokenize
+_src = __runner_code__
+_toks = list(tokenize.generate_tokens(io.StringIO(_src).readline))
+_pairs = []
+_n = len(_toks)
+for _i, _tok in enumerate(_toks):
+    _prev = _toks[_i - 1] if _i > 0 else None
+    _nxt = _toks[_i + 1] if _i + 1 < _n else None
+    _is_call = (
+        _tok.type == tokenize.NAME
+        and _tok.string == 'input'
+        and _prev is not None
+        and not (_prev.type == tokenize.OP and _prev.string == '.')
+        and not (_prev.type == tokenize.NAME and _prev.string in ('def', 'class'))
+        and _nxt is not None
+        and _nxt.type == tokenize.OP
+        and _nxt.string == '('
+    )
+    if _is_call:
+        _pairs.append((_tok.start, _tok.end))
+_offs = []
+_p = 0
+for _ln in _src.splitlines(keepends=True):
+    _offs.append(_p)
+    _p += len(_ln)
+def _off(_pos):
+    return _offs[_pos[0] - 1] + _pos[1]
+_chunks = []
+_prev = 0
+for _s, _e in sorted(((_off(a), _off(b)) for a, b in _pairs)):
+    _chunks.append(_src[_prev:_s])
+    _chunks.append('await __py_input__')
+    _prev = _e
+_chunks.append(_src[_prev:])
+_script = ''.join(_chunks)
+_lines = _script.splitlines() or ['']
+_indented = '\\n'.join(('    ' + _ln) if _ln.strip() else _ln for _ln in _lines)
+_driver = (
+    "import sys, io, traceback\\n"
+    "import builtins\\n"
+    "_old_out, _old_err = sys.stdout, sys.stderr\\n"
+    "sys.stdout = io.StringIO()\\n"
+    "sys.stderr = io.StringIO()\\n"
+    "def __py_input__(p=\\"\\"):\\n"
+    "    return __py_io_input__(str(p))\\n"
+    "builtins.input = __py_input__\\n"
+    "async def __py_main__():\\n"
+    + _indented + "\\n"
+    "try:\\n"
+    "    await __py_main__()\\n"
+    "except BaseException:\\n"
+    "    traceback.print_exc(file=sys.stderr)\\n"
+    "_stdout = sys.stdout.getvalue()\\n"
+    "_stderr = sys.stderr.getvalue()\\n"
+    "sys.stdout = _old_out\\n"
+    "sys.stderr = _old_err\\n"
+    "(_stdout, _stderr)\\n"
+)
+_driver
+`;
+
+async function runPythonInteractive(code) {
     const py = await getPyodide();
+    py.globals.set('__runner_code__', code);
+    py.globals.set('__py_io_input__', (p) => new Promise((resolve) => showConsoleInput(String(p), resolve)));
+    let result;
+    try {
+        const driver = String(py.runPython(PY_INPUT_TRANSFORM));
+        result = await py.runPythonAsync(driver);
+    } finally {
+        py.globals.delete('__runner_code__');
+        py.globals.delete('__py_io_input__');
+    }
+    return { stdout: String(result[0] || ''), stderr: String(result[1] || '') };
+}
+
+async function runPython(code) {
+    if (/\binput\s*\(/.test(code)) return runPythonInteractive(code);
+    return runPythonBundled(code);
+}
+
+async function runPythonBundled(code) {
+    const py = await getPyodide();
+    py.globals.set(
+        '__playground_prompt__',
+        (p) => (typeof prompt === 'function' ? (prompt(String(p)) ?? '') : '')
+    );
     py.globals.set('__runner_code__', code);
     let result;
     try {
         result = py.runPython(`
-import sys, io, traceback
+import sys, io, traceback, builtins
 _old_out, _old_err = sys.stdout, sys.stderr
 sys.stdout = io.StringIO()
 sys.stderr = io.StringIO()
+def __codeplayground_input__(_prompt=""):
+    if _prompt:
+        _old_out.write(str(_prompt))
+        _old_out.flush()
+    return str(__playground_prompt__(str(_prompt)))
+builtins.input = __codeplayground_input__
 try:
     exec(compile(__runner_code__, "<code>", "exec"))
 except BaseException:
@@ -464,6 +770,7 @@ sys.stderr = _old_err
         `);
     } finally {
         py.globals.delete('__runner_code__');
+        py.globals.delete('__playground_prompt__');
     }
     return { stdout: String(result[0] || ''), stderr: String(result[1] || '') };
 }
@@ -544,11 +851,121 @@ async function runLocal(runLang, code) {
     return { stdout: d.stdout || '', stderr };
 }
 
-// ---------- Main run ----------
+// ---------- Packages (usable on GitHub Pages) ----------
+// Python runs in-browser on Pyodide -> wheels via micropip.
+// JavaScript runs in-browser -> CDN script tags (global exposed).
+// Everything else is local-runner only and can't install on GH Pages.
+const PKG_GH = { python: true, javascript: true };
+
+const PACKAGES = {
+    python: [
+        { n: 'numpy', d: 'Arrays & linear algebra' },
+        { n: 'pandas', d: 'Data tables & analysis' },
+        { n: 'matplotlib', d: 'Plotting & charts' },
+        { n: 'scipy', d: 'Scientific computing' },
+        { n: 'scikit-learn', d: 'Machine learning' },
+        { n: 'seaborn', d: 'Statistical visualizations' },
+        { n: 'sympy', d: 'Symbolic math' },
+        { n: 'statsmodels', d: 'Statistical models' },
+        { n: 'requests', d: 'HTTP client' },
+        { n: 'pillow', d: 'Image processing (PIL)' },
+        { n: 'beautifulsoup4', d: 'HTML/XML scraping (bs4)' },
+        { n: 'lxml', d: 'Fast XML/HTML parsing' },
+        { n: 'PyYAML', d: 'YAML parsing' },
+        { n: 'jsonschema', d: 'JSON schema validation' },
+        { n: 'pydantic', d: 'Data validation & models' },
+        { n: 'pytest', d: 'Testing framework' },
+        { n: 'tqdm', d: 'Progress bars' },
+        { n: 'rich', d: 'Styled console output' },
+    ],
+    javascript: [
+        { n: 'lodash', d: 'Utility functions (global _)' },
+        { n: 'jquery', d: 'DOM helpers (global $)' },
+        { n: 'axios', d: 'HTTP client (global axios)' },
+        { n: 'moment', d: 'Dates & times (global moment)' },
+        { n: 'dayjs', d: 'Tiny date library (global dayjs)' },
+        { n: 'papaparse', d: 'CSV parsing (global Papa)' },
+        { n: 'chartjs', d: 'Charts (global Chart)' },
+        { n: 'd3', d: 'Data-driven DOM (global d3)' },
+        { n: 'marked', d: 'Markdown → HTML (global marked)' },
+    ],
+    node: [
+        { n: 'express', d: 'Web framework', local: true },
+        { n: 'lodash', d: 'Utilities', local: true },
+        { n: 'axios', d: 'HTTP client', local: true },
+        { n: 'moment', d: 'Dates & times', local: true },
+        { n: 'uuid', d: 'Unique IDs', local: true },
+    ],
+};
+
+const JS_PKGS = {
+    lodash: 'https://unpkg.com/lodash@4.17.21/lodash.min.js',
+    jquery: 'https://unpkg.com/jquery@3.7.1/dist/jquery.min.js',
+    axios: 'https://unpkg.com/axios@1.7.9/dist/axios.min.js',
+    moment: 'https://unpkg.com/moment@2.30.1/min/moment.min.js',
+    dayjs: 'https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js',
+    papaparse: 'https://unpkg.com/papaparse@5.4.1/papaparse.min.js',
+    chartjs: 'https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js',
+    d3: 'https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js',
+    marked: 'https://cdn.jsdelivr.net/npm/marked@15.0.4/marked.min.js',
+};
+
+function getStoredPkgs(langId) {
+    try {
+        const arr = JSON.parse(load('playground-pkgs-' + langId) || '[]');
+        return Array.isArray(arr) ? arr.filter(Boolean) : [];
+    } catch (err) { return []; }
+}
+
+function setStoredPkgs(langId, arr) {
+    const clean = [...new Set(arr.filter(Boolean))].sort();
+    persist('playground-pkgs-' + langId, JSON.stringify(clean));
+}
+
+const pyPkgOk = new Set();
+
+async function ensurePyPackages() {
+    const stored = getStoredPkgs('python');
+    const remaining = stored.filter(n => !pyPkgOk.has(n));
+    if (!remaining.length) return;
+    const py = await getPyodide();
+    let micropip;
+    try { micropip = pyodide.micropip; } catch (err) { /* fall through */ }
+    if (!micropip) micropip = await py.pyimport('micropip');
+    const failed = [];
+    for (const n of remaining) {
+        setStatus('Installing ' + n + '…', true);
+        try {
+            await micropip.install(n);
+            pyPkgOk.add(n);
+        } catch (err) {
+            failed.push(n + ((err && err.message) ? ' — ' + err.message : ''));
+        }
+    }
+    if (failed.length) {
+        throw new Error('Package install failed: ' + failed.join('; '));
+    }
+}
+
+const jsLoaded = new Set();
+
+async function ensureJsPackages() {
+    const stored = getStoredPkgs('javascript');
+    for (const p of stored) {
+        if (jsLoaded.has(p)) continue;
+        const url = p.startsWith('http') ? p : JS_PKGS[p];
+        if (!url) { setStatus('No CDN bundle for JS package: ' + p); continue; }
+        setStatus('Loading ' + p + '…', true);
+        await loadScript(url);
+        jsLoaded.add(p);
+    }
+}
 async function run() {
     const def = LANGS[currentLangId];
     const code = editor.getValue();
     const seq = ++runSeq;
+    if (pendingInput) { const r = pendingInput; pendingInput = null; r(''); }
+    consoleInputWrap.hidden = true;
     showError('');
     setLoading(true);
     const started = performance.now();
@@ -559,6 +976,7 @@ async function run() {
         if (def.mode === 'html') {
             showPreview(buildSrcdoc(code));
         } else if (def.mode === 'js') {
+            await ensureJsPackages();
             const r = runBrowserJS(code);
             stdout = r.stdout;
             stderr = r.stderr;
@@ -570,6 +988,7 @@ async function run() {
                 stdout = r.stdout;
                 stderr = r.stderr;
             } else {
+                await ensurePyPackages();
                 const r = await runPython(code);
                 stdout = r.stdout;
                 stderr = r.stderr;
@@ -611,15 +1030,19 @@ const FILE_EXT = {
 };
 
 async function downloadScript() {
-    const ext = FILE_EXT[currentLangId] || 'txt';
-    const stem = (fileNameEl.textContent || 'script').replace(/\.[^.]*$/, '') || 'script';
-    const name = stem + '.' + ext;
-    const blob = new Blob([editor.getValue()], { type: 'text/plain' });
+    const t = activeTab();
+    const langId = t ? t.langId : currentLangId;
+    const ext = FILE_EXT[langId] || 'txt';
+    let name = (t ? t.name : 'script.txt') || ('script.' + ext);
+    if (!/\.[A-Za-z0-9]+$/.test(name)) name += '.' + ext;
+    const mime = FILE_MIME[ext] || 'text/plain';
+    const desc = (LANGS[langId] ? LANGS[langId].name : 'Text') + ' file';
+    const blob = new Blob([editor.getValue()], { type: mime });
     if (window.showSaveFilePicker) {
         try {
             const handle = await window.showSaveFilePicker({
                 suggestedName: name,
-                types: [{ description: 'Source file', accept: { 'text/plain': ['.' + ext] } }],
+                types: [{ description: desc, accept: { [mime]: ['.' + ext] } }],
             });
             const writable = await handle.createWritable();
             await writable.write(blob);
@@ -695,7 +1118,8 @@ function signOut() {
 // ---------- Saved scripts (Firestore) ----------
 function openSaveModal() {
     if (!currentUser) { setStatus('Sign in to save scripts.'); openSignIn(); return; }
-    const stem = (fileNameEl.textContent || 'script').replace(/\.[^.]*$/, '');
+    const t = activeTab();
+    const stem = (t ? t.name : 'script').replace(/\.[^.]*$/, '') || 'script';
     saveName.value = stem;
     saveName.focus();
     openOverlay(saveModal);
@@ -780,16 +1204,18 @@ async function openSaved() {
 }
 
 function loadSaved(d) {
-    if (LANGS[d.language]) {
-        langSel.value = d.language;
-        persist('playground-lang', d.language);
-        applyLanguage(d.language);
-        editor.setValue(d.code);
-        savedCode[d.language] = d.code;
-        void run();
-    } else {
-        editor.setValue(d.code || '');
-    }
+    const langId = LANGS[d.language] ? d.language : currentLangId;
+    const t = activeTab();
+    const stem = (d.name || 'script').replace(/\.[^.]*$/, '') || 'script';
+    t.name = ensureExtension(stem, langId);
+    t.langId = langId;
+    t.code = d.code || '';
+    currentLangId = langId;
+    editor.setOption('mode', CM_MODES[langId]);
+    editor.setValue(t.code);
+    renderTabs();
+    schedulePersistTabs();
+    void run();
     setStatus('Loaded "' + d.name + '"');
     closeOverlay();
 }
@@ -812,6 +1238,8 @@ function closeOverlay() {
     signInModal.hidden = true;
     saveModal.hidden = true;
     savedModal.hidden = true;
+    newTabModal.hidden = true;
+    pkgModal.hidden = true;
 }
 
 function openSignIn() {
@@ -820,6 +1248,146 @@ function openSignIn() {
         return;
     }
     openOverlay(signInModal);
+}
+
+// ---------- New tab ----------
+function populateNewTabLang() {
+    newTabLang.textContent = '';
+    for (const id in LANGS) {
+        const opt = document.createElement('option');
+        opt.value = id;
+        opt.textContent = LANGS[id].name;
+        newTabLang.appendChild(opt);
+    }
+}
+
+function openNewTabModal() {
+    populateNewTabLang();
+    newTabLang.value = currentLangId;
+    newTabName.value = '';
+    newTabName.placeholder = nextUntitledName(FILE_EXT[currentLangId] || 'py');
+    openOverlay(newTabModal);
+    newTabName.focus();
+}
+
+function syncNewTabLang() {
+    const langId = langFromName(newTabName.value.trim());
+    if (langId && LANGS[langId]) newTabLang.value = langId;
+}
+
+function handleNewTabCreate() {
+    const selectLang = newTabLang.value;
+    let name = newTabName.value.trim();
+    let langId = selectLang;
+    if (!name) {
+        name = nextUntitledName(FILE_EXT[selectLang] || 'py') + '.' + (FILE_EXT[selectLang] || 'py');
+    } else {
+        const extLang = langFromName(name);
+        if (extLang) langId = extLang;
+    }
+    const tab = createTab(name, langId);
+    closeOverlay();
+    activateTab(tab.id);
+}
+
+// ---------- Package manager ----------
+function openPkgModal() {
+    const def = LANGS[currentLangId];
+    pkgLangName.textContent = def ? def.name : currentLangId;
+    pkgCustom.placeholder = currentLangId === 'javascript'
+        ? 'npm package name or script URL (https://…)'
+        : 'custom package name (e.g. beautifulsoup4)';
+    renderPkgList();
+    openOverlay(pkgModal);
+    pkgCustom.focus();
+}
+
+function pkgRow(p, stored, custom) {
+    const row = document.createElement('label');
+    row.className = 'pkg-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = stored.has(p.n);
+    cb.addEventListener('change', () => {
+        const cur = getStoredPkgs(currentLangId);
+        const next = cb.checked ? [...cur, p.n] : cur.filter(x => x !== p.n);
+        setStoredPkgs(currentLangId, next);
+    });
+    const label = document.createElement('span');
+    label.className = 'pkg-name';
+    label.textContent = p.n;
+    const desc = document.createElement('span');
+    desc.className = 'pkg-desc';
+    desc.textContent = p.d || '';
+    const badge = document.createElement('span');
+    if (custom) {
+        badge.className = 'badge pkg-badge badge--custom';
+        badge.textContent = 'Custom';
+    } else if (p.local) {
+        badge.className = 'badge pkg-badge badge--local';
+        badge.textContent = 'Local only';
+    } else {
+        badge.className = 'badge pkg-badge badge--gh';
+        badge.textContent = 'GH Pages';
+    }
+    row.appendChild(cb);
+    row.appendChild(label);
+    row.appendChild(desc);
+    row.appendChild(badge);
+    return row;
+}
+
+function renderPkgList() {
+    const langId = currentLangId;
+    const stored = new Set(getStoredPkgs(langId));
+    const catalog = PACKAGES[langId] || [];
+    const catalogNames = new Set(catalog.map(p => p.n));
+    const gh = PKG_GH[langId];
+    if (!gh) {
+        pkgNote.textContent = localAvailable
+            ? 'This language only works with the local runner (node server.js) on your machine — the installed tools decide what packages exist.'
+            : 'Packages for this language can\u2019t install on GitHub Pages. Start the local runner (node server.js) to use tools installed on your machine.';
+    } else if (langId === 'javascript') {
+        pkgNote.textContent = 'Tick bundles to include them on the next Run. Pick one, then use its global (e.g. lodash → _).';
+    } else {
+        pkgNote.textContent = 'Tick packages to install them on the next Run (Pyodide wheel = works in-browser).';
+    }
+    pkgList.textContent = '';
+    for (const p of catalog) pkgList.appendChild(pkgRow(p, stored, false));
+    for (const n of stored) {
+        if (catalogNames.has(n)) continue;
+        pkgList.appendChild(pkgRow({
+            n,
+            d: n.startsWith('http') ? 'External script URL' : 'Custom package',
+        }, stored, true));
+    }
+    if (!catalog.length && !stored.size) {
+        const none = document.createElement('p');
+        none.className = 'pkg-empty';
+        none.textContent = 'No package browser for this language yet — try a custom package name below.';
+        pkgList.appendChild(none);
+    }
+}
+
+function installCustomPkg() {
+    const val = pkgCustom.value.trim();
+    if (!val) return;
+    const langId = currentLangId;
+    const cur = getStoredPkgs(langId);
+    if (!cur.includes(val)) {
+        setStoredPkgs(langId, [...cur, val]);
+    }
+    pkgCustom.value = '';
+    renderPkgList();
+    if (PKG_GH[langId]) {
+        if (langId === 'javascript') {
+            setStatus('Will load ' + (val.startsWith('http') ? val : 'npm bundle ' + val) + ' on the next JS Run.');
+        } else {
+            setStatus('Will install ' + val + ' (Pyodide) on the next Python Run.');
+        }
+    } else {
+        setStatus('Saved for ' + LANGS[langId].name + ' \u2014 available with the local runner.');
+    }
 }
 
 // ---------- Firebase init ----------
@@ -846,12 +1414,10 @@ async function initFirebase() {
 }
 
 // ---------- Init ----------
-initLanguages();
-const lastLang = load('playground-lang');
-if (lastLang && LANGS[lastLang]) langSel.value = lastLang;
+bootTabs();
 
 editor = CodeMirror.fromTextArea(editorEl, {
-    mode: CM_MODES[langSel.value],
+    mode: CM_MODES[currentLangId],
     theme: 'vsc',
     lineNumbers: true,
     lineWrapping: false,
@@ -889,9 +1455,13 @@ editor = CodeMirror.fromTextArea(editorEl, {
 const unitPx = Math.round(editor.defaultCharWidth() * 4);
 editor.getWrapperElement().style.setProperty('--indent-unit-px', unitPx + 'px');
 
+editor.setValue(activeTab().code);
+currentLangId = activeTab().langId;
+renderTabs();
+
 editor.on('change', () => {
-    scheduleRun();
     persistCode();
+    scheduleRun();
     requestAnimationFrame(applyIndentGuides);
 });
 
@@ -931,11 +1501,39 @@ function updateIndentUnitPx(vp) {
 }
 editor.on('viewportChange', applyIndentGuides);
 
-langSel.addEventListener('change', () => {
-    persist('playground-' + currentLangId, editor.getValue());
-    persist('playground-lang', langSel.value);
-    applyLanguage(langSel.value);
-    void run();
+newTabBtn.addEventListener('click', openNewTabModal);
+newTabConfirmBtn.addEventListener('click', handleNewTabCreate);
+newTabCancelBtn.addEventListener('click', closeOverlay);
+newTabName.addEventListener('input', syncNewTabLang);
+newTabName.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        handleNewTabCreate();
+    }
+});
+
+pkgBtn.addEventListener('click', openPkgModal);
+pkgCloseBtn.addEventListener('click', closeOverlay);
+pkgInstallBtn.addEventListener('click', installCustomPkg);
+pkgCustom.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        installCustomPkg();
+    }
+});
+
+consoleInput.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    const value = consoleInput.value;
+    const resolve = pendingInput;
+    pendingInput = null;
+    consoleInputWrap.hidden = true;
+    consoleInput.value = '';
+    if (resolve) {
+        setStatus('Ready');
+        resolve(value);
+    }
 });
 
 runBtn.addEventListener('click', () => void run());
@@ -953,7 +1551,6 @@ themeBtn.addEventListener('click', () => {
     applyTheme(next);
 });
 
-applyLanguage(langSel.value);
 applyTheme(load('playground-theme') === 'light' ? 'light' : 'dark');
 void run();
 void checkLocal();

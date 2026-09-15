@@ -20,8 +20,19 @@
                 <span class="lang-label">Language</span>
                 <select id="lang"></select>
             </label>
+            <button id="downloadBtn" class="btn btn--ghost" title="Download this script">Download</button>
+            <button id="saveBtn" class="btn btn--ghost" disabled title="Sign in to save scripts">Save</button>
+            <button id="savedBtn" class="btn btn--ghost" hidden title="Your saved scripts">My Scripts</button>
             <button id="themeBtn" class="btn btn--ghost" title="Toggle dark / light theme (VS Code colors)">Light</button>
             <button id="runBtn" class="btn" title="Ctrl + Enter">Run</button>
+        </div>
+        <div class="auth">
+            <button id="signInBtn" class="btn" title="Sign in to save scripts">Sign in</button>
+            <div id="userArea" class="user" hidden>
+                <img id="userAvatar" class="user-avatar" alt="">
+                <span id="userNameEl" class="user-name"></span>
+                <button id="signOutBtn" class="btn btn--ghost">Sign out</button>
+            </div>
         </div>
         <div id="status" class="status">Ready</div>
     </header>
@@ -53,6 +64,32 @@
         </section>
     </main>
 
+    <div id="overlay" class="overlay" hidden>
+        <div id="signInModal" class="modal" hidden>
+            <h2>Sign in</h2>
+            <p class="modal-note">Sign in to save your scripts to your account.</p>
+            <button id="googleBtn" class="btn btn--provider">Continue with Google</button>
+            <button id="githubBtn" class="btn btn--provider">Continue with GitHub</button>
+            <button id="facebookBtn" class="btn btn--provider" hidden>Continue with Facebook</button>
+            <button id="signInClose" class="btn btn--ghost modal-close">Cancel</button>
+        </div>
+        <div id="saveModal" class="modal" hidden>
+            <h2>Save script</h2>
+            <input id="saveName" class="text-input" type="text" placeholder="Script name" autocomplete="off">
+            <div class="modal-actions">
+                <button id="saveConfirm" class="btn">Save</button>
+                <button id="saveCancel" class="btn btn--ghost">Cancel</button>
+            </div>
+        </div>
+        <div id="savedModal" class="modal modal--wide" hidden>
+            <h2>My Scripts</h2>
+            <div id="savedList" class="saved-list"></div>
+            <div class="modal-actions">
+                <button id="savedClose" class="btn btn--ghost">Close</button>
+            </div>
+        </div>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/lib/codemirror.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/xml/xml.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/mode/css/css.min.js"></script>
@@ -67,6 +104,7 @@
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/edit/matchbrackets.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/selection/active-line.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/codemirror@5.65.16/addon/hint/show-hint.min.js"></script>
+    <script src="firebase-config.js"></script>
     <script src="script.js"></script>
 </body>
 </html>

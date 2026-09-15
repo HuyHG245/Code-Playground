@@ -46,6 +46,35 @@ startup banner prints exactly which ones were detected on your machine.
 - Live results update while you type; Ctrl+Enter re-runs
 - Your code is saved per language in the browser (localStorage)
 
+## Sign in (Google / GitHub) and saved scripts
+
+Signing in is optional and requires a free Firebase project so scripts can be
+saved per user (Firestore). Setup once:
+
+1. Firebase console → create a project → **Authentication → Sign-in method** →
+   enable **Google** and **GitHub** (add your GitHub OAuth app's Client ID /
+   Secret; for Google click "Create new" Web SDK client).
+2. **Project settings → Your apps → Web** → copy the `firebaseConfig` block into
+   `firebase-config.js`.
+3. **Authentication → Settings → Authorized domains** → add your Pages domain
+   (and `localhost` for local testing).
+4. **Firestore → Rules** → paste the contents of `firestore.rules` (each user
+   can only read/write their own `saved_scripts`).
+5. Facebook login stays hidden until you add
+   `facebook: { enabled: true }` to `AUTH_PROVIDERS` in `script.js` and enable
+   the provider in Firebase (requires Meta business verification to go public).
+
+When signed in, **Save** stores the current script to your account and
+**My Scripts** lists / loads / deletes them.
+
+## Download
+
+**Download** saves the current script with the correct extension
+(`.py`, `.js`, `.ts`, `.c`, `.cpp`, `.cs`, `.java`, `.go`, `.rs`, `.php`,
+`.rb`, `.html`, …). On Chromium browsers it opens the OS save dialog
+(`showSaveFilePicker`) so you pick the folder; elsewhere it falls back to a
+normal browser download.
+
 ## Deploy
 
 Static site — push to GitHub and enable GitHub Pages, or just open `index.html`.

@@ -10,6 +10,27 @@ const errorText = document.getElementById('errorText');
 const statusEl = document.getElementById('status');
 const runTimeEl = document.querySelector('.run-time');
 const fileNameEl = document.getElementById('fileName');
+const downloadBtn = document.getElementById('downloadBtn');
+const saveBtn = document.getElementById('saveBtn');
+const savedBtn = document.getElementById('savedBtn');
+const signInBtn = document.getElementById('signInBtn');
+const signOutBtn = document.getElementById('signOutBtn');
+const userArea = document.getElementById('userArea');
+const userAvatar = document.getElementById('userAvatar');
+const userNameEl = document.getElementById('userNameEl');
+const overlay = document.getElementById('overlay');
+const signInModal = document.getElementById('signInModal');
+const saveModal = document.getElementById('saveModal');
+const savedModal = document.getElementById('savedModal');
+const saveName = document.getElementById('saveName');
+const saveConfirmBtn = document.getElementById('saveConfirm');
+const saveCancelBtn = document.getElementById('saveCancel');
+const signInCloseBtn = document.getElementById('signInClose');
+const savedCloseBtn = document.getElementById('savedClose');
+const savedList = document.getElementById('savedList');
+const googleBtn = document.getElementById('googleBtn');
+const githubBtn = document.getElementById('githubBtn');
+const facebookBtn = document.getElementById('facebookBtn');
 
 const PYODIDE_CDN = 'https://cdn.jsdelivr.net/pyodide/v0.26.4/full/';
 const PISTON_URL = 'https://emkc.org/api/v2/piston/execute';
@@ -582,6 +603,248 @@ async function run() {
     runTimeEl.textContent = (performance.now() - started).toFixed(0) + ' ms';
 }
 
+// ---------- Download ----------
+const FILE_EXT = {
+    html: 'html', javascript: 'js', python: 'py', typescript: 'ts', node: 'js',
+    c: 'c', cpp: 'cpp', csharp: 'cs', java: 'java', go: 'go', rust: 'rs',
+    php: 'php', ruby: 'rb',
+};
+
+async function downloadScript() {
+    const ext = FILE_EXT[currentLangId] || 'txt';
+    const stem = (fileNameEl.textContent || 'script').replace(/\.[^.]*$/, '') || 'script';
+    const name = stem + '.' + ext;
+    const blob = new Blob([editor.getValue()], { type: 'text/plain' });
+    if (window.showSaveFilePicker) {
+        try {
+            const handle = await window.showSaveFilePicker({
+                suggestedName: name,
+                types: [{ description: 'Source file', accept: { 'text/plain': ['.' + ext] } }],
+            });
+            const writable = await handle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            setStatus('Downloaded ' + name);
+            return;
+        } catch (err) {
+            if (err && err.name === 'AbortError') { setStatus('Download cancelled'); return; }
+        }
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+    setStatus('Downloaded ' + name);
+}
+
+// ---------- Sign in (Firebase: Google, GitHub; Facebook opt-in) ----------
+let auth = null;
+let db = null;
+let currentUser = null;
+
+const AUTH_PROVIDERS = {
+    google: { enabled: true },
+    github: { enabled: true },
+    facebook: { enabled: false },
+};
+
+function isFirebaseConfigured() {
+    return typeof FIREBASE_CONFIG !== 'undefined' && FIREBASE_CONFIG &&
+        FIREBASE_CONFIG.apiKey && FIREBASE_CONFIG.apiKey.indexOf('YOUR_') === -1;
+}
+
+function firebaseProvider(name) {
+    if (!auth) return null;
+    const map = { google: 'GoogleAuthProvider', github: 'GithubAuthProvider', facebook: 'FacebookAuthProvider' };
+    return new firebase.auth[map[name]]();
+}
+
+function refreshAuthUI() {
+    signInBtn.hidden = !!currentUser;
+    userArea.hidden = !currentUser;
+    saveBtn.disabled = !currentUser;
+    savedBtn.hidden = !currentUser;
+    if (currentUser) {
+        userNameEl.textContent = currentUser.displayName || currentUser.email || 'User';
+        if (currentUser.photoURL) { userAvatar.src = currentUser.photoURL; userAvatar.hidden = false; }
+        else userAvatar.hidden = true;
+    }
+    facebookBtn.hidden = !AUTH_PROVIDERS.facebook.enabled;
+}
+
+function signIn(name) {
+    if (!auth) { setStatus('Sign-in is not configured yet — add your keys to firebase-config.js.'); closeOverlay(); return; }
+    const provider = firebaseProvider(name);
+    if (!provider) return;
+    auth.signInWithPopup(provider)
+        .then(() => { closeOverlay(); setStatus('Signed in'); })
+        .catch((err) => {
+            if (err && err.code === 'auth/popup-closed-by-user') { closeOverlay(); return; }
+            setStatus('Sign-in failed: ' + ((err && err.message) || err));
+        });
+}
+
+function signOut() {
+    if (!auth) return;
+    auth.signOut().then(() => setStatus('Signed out')).catch(() => setStatus('Sign out failed'));
+}
+
+// ---------- Saved scripts (Firestore) ----------
+function openSaveModal() {
+    if (!currentUser) { setStatus('Sign in to save scripts.'); openSignIn(); return; }
+    const stem = (fileNameEl.textContent || 'script').replace(/\.[^.]*$/, '');
+    saveName.value = stem;
+    saveName.focus();
+    openOverlay(saveModal);
+}
+
+async function doSave() {
+    const name = (saveName.value || '').trim();
+    if (!name) { saveName.focus(); return; }
+    const data = {
+        uid: currentUser.uid,
+        name,
+        language: currentLangId,
+        code: editor.getValue(),
+        updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    };
+    saveConfirmBtn.disabled = true;
+    try {
+        const q = await db.collection('saved_scripts').where('uid', '==', currentUser.uid).where('name', '==', name).get();
+        if (q.empty) {
+            await db.collection('saved_scripts').add(data);
+        } else {
+            await q.docs[0].ref.update({ language: data.language, code: data.code, updatedAt: data.updatedAt });
+        }
+        setStatus('Saved "' + name + '"');
+        closeOverlay();
+    } catch (err) {
+        setStatus('Save failed: ' + ((err && err.message) || err));
+    } finally {
+        saveConfirmBtn.disabled = false;
+    }
+}
+
+async function openSaved() {
+    if (!currentUser) return;
+    savedList.textContent = 'Loading…';
+    openOverlay(savedModal);
+    try {
+        const snap = await db.collection('saved_scripts')
+            .where('uid', '==', currentUser.uid)
+            .orderBy('updatedAt', 'desc')
+            .get();
+        savedList.textContent = '';
+        if (snap.empty) {
+            const empty = document.createElement('p');
+            empty.className = 'saved-empty';
+            empty.textContent = 'No saved scripts yet.';
+            savedList.appendChild(empty);
+            return;
+        }
+        snap.forEach((doc) => {
+            const d = doc.data();
+            const row = document.createElement('div');
+            row.className = 'saved-item';
+            const info = document.createElement('div');
+            info.className = 'saved-info';
+            const nm = document.createElement('div');
+            nm.className = 'saved-name';
+            nm.textContent = d.name;
+            const meta = document.createElement('div');
+            meta.className = 'saved-meta';
+            const t = d.updatedAt && d.updatedAt.toDate ? d.updatedAt.toDate() : null;
+            meta.textContent = (LANGS[d.language] ? LANGS[d.language].name : (d.language || 'code')) +
+                (t ? ' · ' + t.toLocaleString() : '');
+            info.appendChild(nm);
+            info.appendChild(meta);
+            const loadBtn = document.createElement('button');
+            loadBtn.className = 'btn btn--small';
+            loadBtn.textContent = 'Load';
+            loadBtn.addEventListener('click', () => loadSaved(d));
+            const delBtn = document.createElement('button');
+            delBtn.className = 'btn btn--small btn--danger';
+            delBtn.textContent = 'Delete';
+            delBtn.addEventListener('click', () => deleteSaved(doc));
+            row.appendChild(info);
+            row.appendChild(loadBtn);
+            row.appendChild(delBtn);
+            savedList.appendChild(row);
+        });
+    } catch (err) {
+        savedList.textContent = 'Failed to load: ' + ((err && err.message) || err);
+    }
+}
+
+function loadSaved(d) {
+    if (LANGS[d.language]) {
+        langSel.value = d.language;
+        persist('playground-lang', d.language);
+        applyLanguage(d.language);
+        editor.setValue(d.code);
+        savedCode[d.language] = d.code;
+        void run();
+    } else {
+        editor.setValue(d.code || '');
+    }
+    setStatus('Loaded "' + d.name + '"');
+    closeOverlay();
+}
+
+async function deleteSaved(doc) {
+    try {
+        await doc.ref.delete();
+    } catch (err) { /* ignore */ }
+    await openSaved();
+}
+
+// ---------- Overlay ----------
+function openOverlay(modal) {
+    overlay.hidden = false;
+    modal.hidden = false;
+}
+
+function closeOverlay() {
+    overlay.hidden = true;
+    signInModal.hidden = true;
+    saveModal.hidden = true;
+    savedModal.hidden = true;
+}
+
+function openSignIn() {
+    if (!isFirebaseConfigured() || typeof firebase === 'undefined') {
+        setStatus('Sign-in is not configured yet — add your keys to firebase-config.js.');
+        return;
+    }
+    openOverlay(signInModal);
+}
+
+// ---------- Firebase init ----------
+async function initFirebase() {
+    if (!isFirebaseConfigured()) { refreshAuthUI(); return; }
+    try {
+        if (typeof firebase === 'undefined') {
+            setStatus('Loading sign-in…', true);
+            await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js');
+            await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js');
+            await loadScript('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js');
+        }
+        firebase.initializeApp(FIREBASE_CONFIG);
+        auth = firebase.auth();
+        db = firebase.firestore();
+        auth.onAuthStateChanged((user) => {
+            currentUser = user || null;
+            refreshAuthUI();
+        });
+    } catch (err) {
+        setStatus('Sign-in unavailable: ' + ((err && err.message) || err));
+    }
+    refreshAuthUI();
+}
+
 // ---------- Init ----------
 initLanguages();
 const lastLang = load('playground-lang');
@@ -694,3 +957,21 @@ applyLanguage(langSel.value);
 applyTheme(load('playground-theme') === 'light' ? 'light' : 'dark');
 void run();
 void checkLocal();
+
+// ---------- Event wiring (download, save, auth) ----------
+downloadBtn.addEventListener('click', () => void downloadScript());
+saveBtn.addEventListener('click', openSaveModal);
+savedBtn.addEventListener('click', () => void openSaved());
+signInBtn.addEventListener('click', openSignIn);
+signOutBtn.addEventListener('click', signOut);
+googleBtn.addEventListener('click', () => signIn('google'));
+githubBtn.addEventListener('click', () => signIn('github'));
+facebookBtn.addEventListener('click', () => signIn('facebook'));
+saveConfirmBtn.addEventListener('click', () => void doSave());
+saveCancelBtn.addEventListener('click', closeOverlay);
+signInCloseBtn.addEventListener('click', closeOverlay);
+savedCloseBtn.addEventListener('click', closeOverlay);
+overlay.addEventListener('click', (e) => { if (e.target === overlay) closeOverlay(); });
+saveName.addEventListener('keydown', (e) => { if (e.key === 'Enter') void doSave(); });
+
+void initFirebase();

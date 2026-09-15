@@ -24,6 +24,7 @@
     --hint-bg: #252526;
     --hint-shadow: rgba(0, 0, 0, 0.5);
     --preview-bg: #ffffff;
+    --indent-guide: rgba(255, 255, 255, 0.11);
 
     /* Syntax tokens — VS Code Dark+ */
     --tok-keyword: #569cd6;
@@ -70,6 +71,7 @@ body[data-theme="light"] {
     --hint-bg: #ffffff;
     --hint-shadow: rgba(0, 0, 0, 0.18);
     --preview-bg: #ffffff;
+    --indent-guide: rgba(0, 0, 0, 0.14);
 
     /* Syntax tokens — VS Code Light+ */
     --tok-keyword: #0000ff;
@@ -281,6 +283,22 @@ body {
     line-height: 1.55;
     background: var(--bg);
     color: var(--text);
+    --indent-unit-px: 34px;
+}
+
+/* Indent guides: one vertical line per indent level, drawn 1px inside each unit
+   so a single 4-space gap already shows its mark and deeper levels stay aligned */
+.cm-s-vsc .cm-indent {
+    background-image: repeating-linear-gradient(
+        to right,
+        transparent 0,
+        transparent calc(var(--indent-unit-px) - 2px),
+        var(--indent-guide) calc(var(--indent-unit-px) - 2px),
+        var(--indent-guide) calc(var(--indent-unit-px) - 1px),
+        transparent calc(var(--indent-unit-px) - 1px),
+        transparent var(--indent-unit-px)
+    );
+    pointer-events: none;
 }
 
 .cm-s-vsc .CodeMirror-gutters {

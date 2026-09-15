@@ -593,7 +593,7 @@ editor = CodeMirror.fromTextArea(editorEl, {
     lineNumbers: true,
     lineWrapping: false,
     tabSize: 4,
-    indentUnit: 2,
+    indentUnit: 4,
     indentWithTabs: false,
     autoCloseBrackets: true,
     autoCloseTags: true,
@@ -603,17 +603,70 @@ editor = CodeMirror.fromTextArea(editorEl, {
     extraKeys: {
         'Ctrl-Space': 'autocomplete',
         'Ctrl-Enter': () => run(),
+        Tab: (cm) => {
+            if (cm.state.completionActive) { cm.state.completionActive.complete(); return; }
+            if (cm.somethingSelected()) { cm.indentSelection('add'); return; }
+            cm.replaceSelection(' '.repeat(cm.getOption('indentUnit')), 'end');
+        },
+        Backspace: (cm) => {
+            if (cm.somethingSelected()) { cm.deleteH(-1, 'char'); return; }
+            const pos = cm.getCursor();
+            const before = cm.getLine(pos.line).slice(0, pos.ch);
+            const unit = cm.getOption('indentUnit');
+            if (pos.ch > 0 && !/[^ \t]/.test(before) && pos.ch % unit === 0) {
+                cm.replaceRange('', CodeMirror.Pos(pos.line, Math.max(0, pos.ch - unit)), pos);
+                return;
+            }
+            cm.execCommand('delCharBefore');
+        },
     },
 });
+
+// Size indent-guide spacing to the editor's real 4-space width.
+const unitPx = Math.round(editor.defaultCharWidth() * 4);
+editor.getWrapperElement().style.setProperty('--indent-unit-px', unitPx + 'px');
 
 editor.on('change', () => {
     scheduleRun();
     persistCode();
+    requestAnimationFrame(applyIndentGuides);
 });
 
 editor.on('inputRead', maybeAutoHint);
 
-editor.on('refresh', () => setStatus('Ready'));
+editor.on('refresh', () => {
+    setStatus('Ready');
+    applyIndentGuides();
+});
+
+// Indentation guides: draw a faint vertical line at each indent level by
+// marking each line's leading whitespace and painting a repeating gradient
+// sized to one indent unit (indentUnit * real character width).
+function applyIndentGuides() {
+    if (!editor) return;
+    const vp = editor.getViewport();
+    updateIndentUnitPx(vp);
+    for (const mk of editor.getAllMarks()) if (mk.__guide) mk.clear();
+    for (let ln = vp.from; ln < vp.to; ln++) {
+        const m = /^[ \t]+/.exec(editor.getLine(ln));
+        if (!m) continue;
+        const mk = editor.markText(CodeMirror.Pos(ln, 0), CodeMirror.Pos(ln, m[0].length), { className: 'cm-indent' });
+        mk.__guide = true;
+    }
+}
+
+function updateIndentUnitPx(vp) {
+    let px = Math.round(editor.defaultCharWidth() * 4);
+    for (let ln = vp.from; ln < vp.to; ln++) {
+        const m = /^ +/.exec(editor.getLine(ln));
+        if (!m || m[0].length < 4) continue;
+        const a = editor.charCoords(CodeMirror.Pos(ln, 0), 'local');
+        const b = editor.charCoords(CodeMirror.Pos(ln, 4), 'local');
+        if (b.left > a.left + 1) { px = b.left - a.left; break; }
+    }
+    editor.getWrapperElement().style.setProperty('--indent-unit-px', px.toFixed(2) + 'px');
+}
+editor.on('viewportChange', applyIndentGuides);
 
 langSel.addEventListener('change', () => {
     persist('playground-' + currentLangId, editor.getValue());
